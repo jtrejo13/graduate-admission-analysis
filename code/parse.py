@@ -6,10 +6,71 @@ import re
 file_path = './raw_data/page_{0}.html'
 data_path = '../data/graduate.csv'
 
-def processAcceptance(elems):
-    for elem in elems:
-        pass
-        # print(elem)
+DEGREE = [
+  (' mfa', 'Other'),
+  (' m eng', 'Masters'),
+  (' meng', 'Masters'),
+  (' m.eng', 'Masters'),
+  (' masters', 'Masters'),
+  (' phd', 'PhD'),
+  (' mba', 'Other'),
+  (' other', 'Other'),
+  (' edd', 'Other'),
+]
+
+errlog = {'major': [], 'gpa': [], 'general': []}
+
+def processScores(elems):
+    """
+    Code source: https://github.com/deedy/gradcafe_data/blob/master/cs/parse.py
+    """
+
+    gpafin, grev, grem, grew, new_gre, sub = None, None, None, None, None, None
+    if elems:
+      gre_text = elems.get_text()
+      gpa = re.search('Undergrad GPA: ((?:[0-9]\.[0-9]{1,2})|(?:n/a))', gre_text)
+      general = re.search('GRE General \(V/Q/W\): ((?:1[0-9]{2}/1[0-9]{2}/(?:(?:[0-6]\.[0-9]{2})|(?:99\.99)|(?:56\.00)))|(?:n/a))', gre_text)
+      new_gref = True
+
+      if gpa:
+        gpa = gpa.groups(1)[0]
+        if not gpa == 'n/a':
+          try:
+            gpafin = float(gpa)
+          except:
+            Tracer()()
+      else:
+        errlog['gpa'].append((index, gre_text))
+      if not general:
+        general = re.search('GRE General \(V/Q/W\): ((?:[2-8][0-9]0/[2-8][0-9]0/(?:(?:[0-6]\.[0-9]{2})|(?:99\.99)|(?:56\.00)))|(?:n/a))', gre_text)
+        new_gref = False
+
+      if general:
+        general = general.groups(1)[0]
+        if not general == 'n/a':
+          try:
+            greparts = general.split('/')
+            if greparts[2] == '99.99' or greparts[2] == '0.00' or greparts[2] == '56.00':
+              grew = None
+            else:
+              grew = float(greparts[2])
+            grev = int(greparts[0])
+            grem = int(greparts[1])
+            new_gre = new_gref
+            if new_gref and (grev > 170 or grev < 130 or grem > 170 or grem < 130 or (grew and (grew < 0 or grew > 6))):
+              errlog['general'].append((index, gre_text))
+              grew, grem, grev, new_gre = None, None, None, None
+            elif not new_gref and (grev > 800 or grev < 200 or grem > 800 or grem < 200 or (grew and (grew < 0 or grew > 6))):
+              errlog['general'].append((index, gre_text))
+              grew, grem, grev, new_gre = None, None, None, None
+          except Exception as e:
+            Tracer()()
+      else:
+        errlog['general'].append((index, gre_text))
+
+    # print (gpafin, grev, grem, grew, new_gre)
+    return (gpafin, grev, grem, grew, new_gre)
+
 
 def processRow(index, row):
 
@@ -18,13 +79,54 @@ def processRow(index, row):
     if len(elems) != 6:
         Tracer()()
 
-    # Get University name
+    # Get Decision\
+    descision_txt = elems[2].get_text().lower()
     try:
-        uni_name = elems[0].get_text()
+        decision = None
+        if 'accepted' in descision_txt:
+            decision = 'Accepted'
+        elif 'rejected' in  descision_txt:
+            decision = 'Rejected'
+        else:
+            return []
     except:
         Tracer()()
 
-    # Get Status
+    # Get University name
+    try:
+        uni_txt = None
+        uni_txt = elems[0].get_text()
+        university = re.sub("\x08", "", uni_txt)
+    except:
+        Tracer()()
+
+    # Get Major
+    try:
+        major = None
+        major_txt = elems[1].get_text().lower()
+        if 'computer science' in major_txt:
+            major = 'CS'
+        else:
+            major = 'Other'
+            errlog['major'].append((index, row))
+        # Get degree (PhD, MS, etc)
+        degree = None
+        for prog, val in DEGREE:
+            if prog in major_txt:
+                degree = val
+                break
+            else:
+                degree = 'Other'
+    except:
+        Tracer()()
+
+    # Get Scores
+    scores_elem = elems[2].find(class_='extinfo')
+    # processScores(scores_elem)
+    gpafin, grev, grem, grew, new_gre = processScores(scores_elem)
+    # gpafin, grev, grem, grew, new_gre = None, None, None, None, None
+
+    # Get Status (A, U, I)
     try:
         status = elems[3].get_text()
     except:
@@ -32,6 +134,7 @@ def processRow(index, row):
 
     # Get Comment
     try:
+        comment = None
         comment_entry = (elems[5].find_all('li'))
         comment = comment_entry[1].get_text()
     except:
@@ -39,17 +142,14 @@ def processRow(index, row):
 
     # Get Admission Date
     try:
+        year = None
         date_str = elems[4].get_text()
-        print(date_str)
         _, _, y = date_str.split(" ")
         year = int(y)
     except:
         Tracer()()
 
-    #_data = elems[1].get_text()
-    #processAcceptance(elems[2])
-
-    return [uni_name, status, comment, year]
+    return [university, major, degree, decision, status, year, gpafin, grev, grem, grew, new_gre]
 
 data = []
 for i in range(1, 2):
@@ -58,10 +158,12 @@ for i in range(1, 2):
         tables = page.find_all('table', id='my-table')
         for table in tables:
             rows = table.find_all('tr', class_=re.compile('row'))
-            for row in range(1, 2):  # for row in rows
-                entry = processRow(i, rows[0])
+            for row in rows:  # for row in rows
+                entry = processRow(i, row)
                 if len(entry) > 0:
+                    print(entry)
                     data.append(entry)
     print('processing file {0}...'.format(i))
 
-print(data)
+df = pd.DataFrame(data)
+df.to_csv('cs_data.csv')

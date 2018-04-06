@@ -1,11 +1,11 @@
 import requests
 from bs4 import BeautifulSoup as soup
 
-url_generic = 'https://thegradcafe.com/survey/index.php?q=computer%2A&t=a&pp=250&o=d&p={0}'
+url_generic = 'https://thegradcafe.com/survey/index.php?q=computer+science%2A&t=a&pp=250&o=d&p={0}'
 headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_3) \
  AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'}
 
-for i in range(1, 186):
+for i in range(1, 144):
     url = url_generic.format(i)
     r = requests.get(url, headers=headers)
     html = r.text
