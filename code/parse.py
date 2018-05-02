@@ -1,5 +1,11 @@
+# @Author: Juan Trejo
+# @Date:   2018-03-28T17:17:44-05:00
+# @Last modified by:   jtrj13
+# @Last modified time: 2018-05-02T14:21:17-05:00
+
+
 from bs4 import BeautifulSoup as soup
-from IPython.core.debugger import Tracer
+# from IPython.core.debugger import Tracer
 import pandas as pd
 import re
 
@@ -20,7 +26,7 @@ DEGREE = [
 
 errlog = {'major': [], 'gpa': [], 'general': []}
 
-def processScores(elems):
+def processScores(index, elems):
     """
     Code source: https://github.com/deedy/gradcafe_data/blob/master/cs/parse.py
     """
@@ -38,7 +44,7 @@ def processScores(elems):
           try:
             gpafin = float(gpa)
           except:
-            Tracer()()
+            print('Tracer()()')
       else:
         errlog['gpa'].append((index, gre_text))
       if not general:
@@ -64,7 +70,7 @@ def processScores(elems):
               errlog['general'].append((index, gre_text))
               grew, grem, grev, new_gre = None, None, None, None
           except Exception as e:
-            Tracer()()
+            print('Tracer()()')
       else:
         errlog['general'].append((index, gre_text))
 
@@ -77,7 +83,7 @@ def processRow(index, row):
     elems = row.find_all('td')
 
     if len(elems) != 6:
-        Tracer()()
+        print('Tracer()()')
 
     # Get Decision\
     descision_txt = elems[2].get_text().lower()
@@ -90,15 +96,15 @@ def processRow(index, row):
         else:
             return []
     except:
-        Tracer()()
+        print('Tracer()()')
 
     # Get University name
     try:
         uni_txt = None
         uni_txt = elems[0].get_text()
-        university = re.sub("\x08", "", uni_txt)
+        university = re.sub("\xa0", "", uni_txt)
     except:
-        Tracer()()
+        print('Tracer()()')
 
     # Get Major
     try:
@@ -118,19 +124,19 @@ def processRow(index, row):
             else:
                 degree = 'Other'
     except:
-        Tracer()()
+        print('Tracer()()')
 
     # Get Scores
     scores_elem = elems[2].find(class_='extinfo')
     # processScores(scores_elem)
-    gpafin, grev, grem, grew, new_gre = processScores(scores_elem)
+    gpafin, grev, grem, grew, new_gre = processScores(index, scores_elem)
     # gpafin, grev, grem, grew, new_gre = None, None, None, None, None
 
     # Get Status (A, U, I)
     try:
         status = elems[3].get_text()
     except:
-        Tracer()()
+        print('Tracer()()')
 
     # Get Comment
     try:
@@ -138,7 +144,7 @@ def processRow(index, row):
         comment_entry = (elems[5].find_all('li'))
         comment = comment_entry[1].get_text()
     except:
-        Tracer()()
+        print('Tracer()()')
 
     # Get Admission Date
     try:
@@ -147,23 +153,25 @@ def processRow(index, row):
         _, _, y = date_str.split(" ")
         year = int(y)
     except:
-        Tracer()()
+        print('Tracer()()')
 
     return [university, major, degree, decision, status, year, gpafin, grev, grem, grew, new_gre]
 
 data = []
-for i in range(1, 2):
+for i in range(1, 147):
     with open(file_path.format(i), 'r') as f:
         page = soup(f, 'html.parser')
         tables = page.find_all('table', id='my-table')
         for table in tables:
             rows = table.find_all('tr', class_=re.compile('row'))
+            count = 1
             for row in rows:  # for row in rows
+                count = count + 1
                 entry = processRow(i, row)
                 if len(entry) > 0:
-                    print(entry)
+                    print('page:{page}, row:{row}'.format(page=i, row=count, uni=entry[0]))
                     data.append(entry)
-    print('processing file {0}...'.format(i))
+    print('processing file {file}...'.format(file=i))
 
 df = pd.DataFrame(data)
 df.to_csv('cs_data.csv')
