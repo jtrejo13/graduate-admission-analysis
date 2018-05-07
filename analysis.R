@@ -30,13 +30,14 @@ names(admission)
 summary(admission)
 
 # Data distribution check
+count(admission$degree)
 hist(admission$ranking)
 hist(admission$year)
 hist(admission$gpafin)
 hist(admission$gretot)
 
 # Intital Model
-adm_mod_0 <- glm(decision ~ gretot + gpafin + status + degree + ranking + status*gpafin, data=admission, family="binomial")
+adm_mod_0 <- glm(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=admission, family="binomial")
 summary(adm_mod_0)
 
 # Assumption Check
@@ -47,10 +48,10 @@ threeOuts(adm_mod_0, key.variable = "id")
 
 # Remove outliers
 "%not in%" <- Negate("%in%")
-g_admission <- admission[admission$id %not in% c('384'),]
+g_admission <- admission[admission$id %not in% c('77'),]
 
 # Re-run
-adm_mod <- glm(decision ~ gretot + gpafin + status + degree + ranking + status*gpafin, data=g_admission, family="binomial")
+adm_mod <- glm(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=g_admission, family="binomial")
 summary(adm_mod)
 
 # Odds-ratios
@@ -59,7 +60,7 @@ exp(confint.default(adm_mod))
 
 # Stats
 library(rms)
-adm_mod_2 <- lrm(decision ~ gretot + gpafin + status + degree + ranking + status*gpafin, g_admission)
+adm_mod_2 <- lrm(decision ~ gpafin + grev + grem + grew + status + degree + ranking, g_admission)
 adm_mod_2
 
 # Pseudo R2
@@ -111,20 +112,20 @@ table(admission_test$id, admission_test$decision, admission_test$admission_model
 # # # # #
 
 # Moderation
-lmDecomp(adm_mod, "statusU", "gpafin", mod.type=2, mod.values = c(1, 2, 3), print.sslopes = FALSE)
-
-
-admission_mns_1 <- summary(lsmeans(adm_mod, "gpafin",
-                                 at=list(gpafin = seq(2.45, 4, 0.1)), by="status", type="response"))
-
-simpleScatter(g_admission, gpafin, decision_bin, ptalpha = 0,
-              title="Quality of Life:Psychological Assessment and State Anxiety by Student Group") +
-  geom_line(data=admission_mns_1, aes(x=gpafin, y=prob, color=status)) +
-  geom_ribbon(data=admission_mns_1, aes(y=prob, ymin=asymp.LCL, ymax=asymp.UCL, group=status), alpha=0.1) 
-  # #Change to your group names and number of groups
-  # scale_colour_manual(name = "Status",
-                      # values =c("red", "blue", "green"),
-                      # labels = c("American, US Degree", "Not American, US Degree", "International"))
+# lmDecomp(adm_mod, "statusU", "gpafin", mod.type=2, mod.values = c(1, 2, 3), print.sslopes = FALSE)
+# 
+# 
+# admission_mns_1 <- summary(lsmeans(adm_mod, "gpafin",
+#                                  at=list(gpafin = seq(2.45, 4, 0.1)), by="status", type="response"))
+# 
+# simpleScatter(g_admission, gpafin, decision_bin, ptalpha = 0,
+#               title="Quality of Life:Psychological Assessment and State Anxiety by Student Group") +
+#   geom_line(data=admission_mns_1, aes(x=gpafin, y=prob, color=status)) +
+#   geom_ribbon(data=admission_mns_1, aes(y=prob, ymin=asymp.LCL, ymax=asymp.UCL, group=status), alpha=0.1) 
+#   # #Change to your group names and number of groups
+#   # scale_colour_manual(name = "Status",
+#                       # values =c("red", "blue", "green"),
+#                       # labels = c("American, US Degree", "Not American, US Degree", "International"))
 
 # Look at ranges...
 summary(g_admission)
@@ -141,38 +142,50 @@ ggplot(mns, aes(x=status, y=prob)) +
 
 # Predict GPA
 library(lsmeans)
-admission_mns_gpa <- summary(lsmeans(adm_mod, "gpafin",
-                                 at=list(gpafin = seq(2.45, 4, 0.1)), type="response"))
+adm_mns_gpa <- summary(lsmeans(adm_mod, "gpafin",
+                                 at=list(gpafin = seq(2, 4, 0.1)), type="response"))
 
 # Graph GPA
-g <- simpleScatter(g_admission, gpafin, decision_bin, title="Decision Graph",
+g <- simpleScatter(g_admission, gpafin, decision_bin, title="Probability of Admission v. GPA",
                    xlab="GPA", ylab="P(Admission)")
 g +
-  geom_line(data=admission_mns_gpa, aes(x=gpafin, y=prob), color="red") +
-  geom_line(data=admission_mns_gpa, aes(x=gpafin, y=asymp.LCL), linetype="dashed") +
-  geom_line(data=admission_mns_gpa, aes(x=gpafin, y=asymp.UCL), linetype="dashed")
+  geom_line(data=adm_mns_gpa, aes(x=gpafin, y=prob), color="red") +
+  geom_line(data=adm_mns_gpa, aes(x=gpafin, y=asymp.LCL), linetype="dashed") +
+  geom_line(data=adm_mns_gpa, aes(x=gpafin, y=asymp.UCL), linetype="dashed")
 
-# Predict GRE
-admission_mns <- summary(lsmeans(adm_mod, "gretot",
-                                 at=list(gretot = seq(297, 340, 10)), type="response"))
+# Predict GRE Verbal
+adm_mns_grev <- summary(lsmeans(adm_mod, "grev",
+                                 at=list(grev = seq(135, 170, 1)), type="response"))
 
-# Graph GRE
-g1 <- simpleScatter(g_admission, gretot, decision_bin, title="Decision Graph",
-                   xlab="GRE", ylab="P(Admission)")
+# Graph GRE Verbal
+g1 <- simpleScatter(g_admission, grev, decision_bin, title="Probability of Admission v. GRE Verbal Score",
+                   xlab="GRE Verbal", ylab="P(Admission)")
 g1 +
-  geom_line(data=admission_mns, aes(x=gretot, y=prob), color="red") +
-  geom_line(data=admission_mns, aes(x=gretot, y=asymp.LCL), linetype="dashed") +
-  geom_line(data=admission_mns, aes(x=gretot, y=asymp.UCL), linetype="dashed")
+  geom_line(data=adm_mns_grev, aes(x=grev, y=prob), color="red") +
+  geom_line(data=adm_mns_grev, aes(x=grev, y=asymp.LCL), linetype="dashed") +
+  geom_line(data=adm_mns_grev, aes(x=grev, y=asymp.UCL), linetype="dashed")
+
+# Predict GRE Math
+adm_mns_grem <- summary(lsmeans(adm_mod, "grem",
+                                at=list(grem = seq(141, 170, 1)), type="response"))
+
+# Graph GRE Math
+g2 <- simpleScatter(g_admission, grem, decision_bin, title="Probability of Admission v. GRE Math Score",
+                    xlab="GRE Verbal", ylab="P(Admission)")
+g2 +
+  geom_line(data=adm_mns_grem, aes(x=grem, y=prob), color="red") +
+  geom_line(data=adm_mns_grem, aes(x=grem, y=asymp.LCL), linetype="dashed") +
+  geom_line(data=adm_mns_grem, aes(x=grem, y=asymp.UCL), linetype="dashed")
 
 # Predict Ranking
-admission_mns_rank <- summary(lsmeans(adm_mod, "ranking",
-                                 at=list(ranking=seq(2.3, 5, 0.1)), type="response"))
+adm_mns_rank <- summary(lsmeans(adm_mod, "ranking",
+                                 at=list(ranking=seq(2.2, 5, 0.1)), type="response"))
 
 # Graph Ranking
-g2 <- simpleScatter(g_admission, ranking, decision_bin, title="Decision Plot",
+g3 <- simpleScatter(g_admission, ranking, decision_bin, title="Probability of Admission v. School Ranking",
                    xlab="Ranking", ylab="P(Admission)")
-g2 +
-  geom_line(data=admission_mns_rank, aes(x=ranking, y=prob), color="red") +
-  geom_line(data=admission_mns_rank, aes(x=ranking, y=asymp.LCL), linetype="dashed") +
-  geom_line(data=admission_mns_rank, aes(x=ranking, y=asymp.UCL), linetype="dashed")
+g3 +
+  geom_line(data=adm_mns_rank, aes(x=ranking, y=prob), color="red") +
+  geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.LCL), linetype="dashed") +
+  geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.UCL), linetype="dashed")
 
