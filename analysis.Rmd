@@ -1,8 +1,13 @@
+---
+title: "Graduate Admission Analysis"
+author: "Juan Trejo"
+date: "May 8, 2018"
+output: html_document
+---
 
-# # # # # # # # # # # # # # # # # # # #
-# Project: Graduate Admission Analysis
-# # # # # # # # # # # # # # # # # # # #
+The following code was used to to examine...
 
+```{r}
 library(SDSRegressionR)
 
 # Import data
@@ -49,14 +54,23 @@ threeOuts(adm_mod_0, key.variable = "id")
 # Remove outliers
 "%not in%" <- Negate("%in%")
 g_admission <- admission[admission$id %not in% c('77'),]
+```
 
+```{r}
 # Re-run
 adm_mod <- glm(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=g_admission, family="binomial")
 summary(adm_mod)
 
-# Odds-ratios
-exp(adm_mod$coef)
-exp(confint.default(adm_mod))
+# # # # # # # #
+# Odds-ratios #
+# # # # # # # #
+
+library(oddsratio)
+incr <- list(gpafin=.5, grev=20, grem=20, grew=.5, status=1, degree=1, ranking=.5)
+or_glm(data=g_admission, adm_mod, incr=incr , CI = 0.95)
+
+# exp(adm_mod$coef)
+# exp(confint.default(adm_mod))
 
 # Stats
 library(rms)
@@ -78,54 +92,72 @@ pairs(lsmeans(adm_mod, "status"), reverse=TRUE, adjust="none")
 
 summary(adm_mod)
 ref.grid(adm_mod)
+```
 
-# # PSA
-# alpha_PSA <- -5.373861
-# beta_PSA  <- 0.032964
-# omega_PSA <- (-0.027747 * 66.145) + (-0.014582 * 16.264) + (1.025764 * 6.3669)
-# vmark_PSA <- (log(0.50 / (1 - 0.50)) - alpha_PSA - omega_PSA) / beta_PSA
-# vmark_PSA
-# 
-# # GLEASON
-# alpha_G <- -5.373861
-# beta_G <- 1.025764
-# omega_G <- (-0.027747 * 66.145) + (-0.014582 * 16.264) + (0.032964 * 15.377)
-# vmark_G <- (log(0.50 / (1 - 0.50)) - alpha_G - omega_G) / beta_G
-# vmark_G
-
+```{r}
 # # # # # # # #
 # Prediction  #
 # # # # # # # #
 
 # Bring in new data:
-admission_test <- adm_data[501:510, ]
+admission_test <- adm_data[501:600, ]
 table(admission_test$decision)
 table(admission_test$status)
 hist(admission_test$gretot)
 
 odds <- exp(predict(adm_mod, admission_test))
 admission_test <- data.frame(admission_test, admission_model=odds/(odds+1))
-table(admission_test$id, admission_test$decision, admission_test$admission_model)
+admission_test$prediction[admission_test$admission_model > 0.5] <- "Accepted"
+admission_test$prediction[admission_test$admission_model <= 0.5] <- "Rejected"
 
+# Accuracy
+accuracy <- sum(admission_test$prediction == admission_test$decision) / length(admission_test$prediction)
+
+# Accuracy Evaluation of nn model with a confusion matrix
+cm <- table(admission_test$decision, admission_test$prediction)
+cat("\nConfusion matrix for resulting nn model is: \n")
+print(cm)
+
+precision <- 45 / (45 + 21)
+recall <- 45 / (45 + 8)
+
+F1 <- 2 * (precision*recall) / (precision + recall)
+
+# # # # # # # #
+# Neural Net  #
+# # # # # # # #
+
+library(nnet)
+# Set Sample Indices
+set.seed(1)
+sampidx <- c(sample(1:5860,4102))
+
+nn_data <- data.frame(adm_data$gpafin, adm_data$grev, adm_data$grem, adm_data$grew, adm_data$status, 
+                      adm_data$degree, adm_data$ranking, adm_data$decision)
+names(nn_data) <- c("gpafin", "grev", "grem", "grew", "status", "degree", "ranking", "decision")
+
+# create and train Neural Network
+cat("\nCreating and training a neural network . . \n")
+adm_nn <- nnet(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=nn_data, subset = sampidx,
+             size=70)
+
+# Accuracy Evaluation of nn model with a confusion matrix
+cm <- table(nn_data$decision[-sampidx], predict(adm_nn, nn_data[-sampidx, ],
+                                              type="class"))
+cat("\nConfusion matrix for resulting nn model is: \n")
+print(cm)
+
+precision_nn <- 640 / (640 + 306)
+recall_nn <- 640 / (640 + 309)
+
+F1_nn <- 2 * (precision_nn*recall_nn) / (precision_nn + recall_nn)
+accuracy_nn <- (640 + 503) / length(nn_data$decision[-sampidx])
+```
+
+```{r}
 # # # # #
 # Plots #
 # # # # #
-
-# Moderation
-# lmDecomp(adm_mod, "statusU", "gpafin", mod.type=2, mod.values = c(1, 2, 3), print.sslopes = FALSE)
-# 
-# 
-# admission_mns_1 <- summary(lsmeans(adm_mod, "gpafin",
-#                                  at=list(gpafin = seq(2.45, 4, 0.1)), by="status", type="response"))
-# 
-# simpleScatter(g_admission, gpafin, decision_bin, ptalpha = 0,
-#               title="Quality of Life:Psychological Assessment and State Anxiety by Student Group") +
-#   geom_line(data=admission_mns_1, aes(x=gpafin, y=prob, color=status)) +
-#   geom_ribbon(data=admission_mns_1, aes(y=prob, ymin=asymp.LCL, ymax=asymp.UCL, group=status), alpha=0.1) 
-#   # #Change to your group names and number of groups
-#   # scale_colour_manual(name = "Status",
-#                       # values =c("red", "blue", "green"),
-#                       # labels = c("American, US Degree", "Not American, US Degree", "International"))
 
 # Look at ranges...
 summary(g_admission)
@@ -188,4 +220,5 @@ g3 +
   geom_line(data=adm_mns_rank, aes(x=ranking, y=prob), color="red") +
   geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.LCL), linetype="dashed") +
   geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.UCL), linetype="dashed")
+```
 
