@@ -245,4 +245,3 @@ g3 +
   geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.LCL), linetype="dashed") +
   geom_line(data=adm_mns_rank, aes(x=ranking, y=asymp.UCL), linetype="dashed")
 ```
-
