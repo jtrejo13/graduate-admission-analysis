@@ -4,10 +4,15 @@ author: "Juan Trejo"
 date: "May 8, 2018"
 output: html_document
 ---
-
-The following code was used to to examine...
+The following code was used to examine how GRE, GPA, applicant status, 
+degree sought and school ranking effect the likelihood of an applicant being 
+accepted to her graduate school of interest.
 
 ```{r}
+# ---------------------
+# Preliminary Analysis
+# ---------------------
+
 library(SDSRegressionR)
 
 # Import data
@@ -32,10 +37,13 @@ admission <- adm_data[1:500, ]
 names(admission)
 
 # Summary
-summary(admission)
+library(psych)
+describe(admission)
 
-# Data distribution check
+# Data check
+count(admission$decision)
 count(admission$degree)
+count(admission$status)
 hist(admission$ranking)
 hist(admission$year)
 hist(admission$gpafin)
@@ -57,20 +65,19 @@ g_admission <- admission[admission$id %not in% c('77'),]
 ```
 
 ```{r}
+# -----------------
+# In-Depth Analysis
+# -----------------
+
 # Re-run
 adm_mod <- glm(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=g_admission, family="binomial")
 summary(adm_mod)
+confint.default(adm_mod)
 
-# # # # # # # #
-# Odds-ratios #
-# # # # # # # #
-
+# Odds-ratios 
 library(oddsratio)
-incr <- list(gpafin=.5, grev=20, grem=20, grew=.5, status=1, degree=1, ranking=.5)
+incr <- list(gpafin=.5, grev=5, grem=5, grew=.5, status=1, degree=1, ranking=.5)
 or_glm(data=g_admission, adm_mod, incr=incr , CI = 0.95)
-
-# exp(adm_mod$coef)
-# exp(confint.default(adm_mod))
 
 # Stats
 library(rms)
@@ -89,22 +96,22 @@ Anova(adm_mod, type="III")
 library(lsmeans)
 lsmeans(adm_mod, "status", type="response")
 pairs(lsmeans(adm_mod, "status"), reverse=TRUE, adjust="none")
-
-summary(adm_mod)
-ref.grid(adm_mod)
 ```
 
-```{r}
-# # # # # # # #
-# Prediction  #
-# # # # # # # #
+```{r} 
+# --------------
+# Model Accuracy
+# --------------
 
-# Bring in new data:
+# Bring in new test data:
 admission_test <- adm_data[501:600, ]
+
+# Check test data
 table(admission_test$decision)
 table(admission_test$status)
 hist(admission_test$gretot)
 
+# Predict Admission
 odds <- exp(predict(adm_mod, admission_test))
 admission_test <- data.frame(admission_test, admission_model=odds/(odds+1))
 admission_test$prediction[admission_test$admission_model > 0.5] <- "Accepted"
@@ -122,47 +129,64 @@ precision <- 45 / (45 + 21)
 recall <- 45 / (45 + 8)
 
 F1 <- 2 * (precision*recall) / (precision + recall)
+```
 
-# # # # # # # #
-# Neural Net  #
-# # # # # # # #
 
-library(nnet)
-# Set Sample Indices
-set.seed(1)
-sampidx <- c(sample(1:5860,4102))
+```{r}
+# -------
+# Predict
+# -------
 
-nn_data <- data.frame(adm_data$gpafin, adm_data$grev, adm_data$grem, adm_data$grew, adm_data$status, 
-                      adm_data$degree, adm_data$ranking, adm_data$decision)
-names(nn_data) <- c("gpafin", "grev", "grem", "grew", "status", "degree", "ranking", "decision")
+# Import My Data
+my_data <- read.csv("data/juan_data.csv", stringsAsFactors = FALSE)
 
-# create and train Neural Network
-cat("\nCreating and training a neural network . . \n")
-adm_nn <- nnet(decision ~ gpafin + grev + grem + grew + status + degree + ranking, data=nn_data, subset = sampidx,
-             size=70)
+# Factorize Variables
+my_data$status <- factor(my_data$status, levels=c("A", "U", "I"))
+my_data$degree <- factor(my_data$degree, levels=c("Masters", "PhD"))
 
-# Accuracy Evaluation of nn model with a confusion matrix
-cm <- table(nn_data$decision[-sampidx], predict(adm_nn, nn_data[-sampidx, ],
-                                              type="class"))
-cat("\nConfusion matrix for resulting nn model is: \n")
-print(cm)
+# Predict Odds of Admission based on my scores
+my_odds <- predict(adm_mod, newdata=my_data, se.fit=TRUE)
+my_data$prediction_prob <- exp(my_odds$fit)/(exp(my_odds$fit) + 1)
 
-precision_nn <- 640 / (640 + 306)
-recall_nn <- 640 / (640 + 309)
+# Admission Probability for avg applicant
+mns_rank <- summary(lsmeans(adm_mod, "ranking",
+                                at=list(ranking=seq(2.5, 5, 0.25)), type="response"))
 
-F1_nn <- 2 * (precision_nn*recall_nn) / (precision_nn + recall_nn)
-accuracy_nn <- (640 + 503) / length(nn_data$decision[-sampidx])
+# Plot
+with(my_data, plot(ranking, prediction_prob, type="n", 
+    ylim=c(0, 1), ylab="P(Admission)", xlab="School Ranking", main="Probability of Admission vs School Ranking", panel.first = grid()))
+# Add my probability 
+with(my_odds, lines(seq(2.5, 5, by=.25), exp(fit)/(1+exp(fit)), col="blue"))
+# Add Prediction Interval
+with(my_odds, polygon(x = c(seq(2.5, 5, by=.25), rev(seq(2.5, 5, by=.25))),
+                       y = c(exp(fit+1.96*se.fit)/(1+exp(fit+1.96*se.fit)),
+              rev(exp(fit-1.96*se.fit)/(1+exp(fit-1.96*se.fit)))),
+              col =  adjustcolor("dodgerblue", alpha.f = 0.10), border = NA))
+
+# Add avg applicant's probability
+with(mns_rank, lines(seq(2.5, 5, by=.25), prob, col="red"))
+# Add Confidence interval
+with(mns_rank, polygon(x = c(seq(2.5, 5, by=.25), rev(seq(2.5, 5, by=.25))),
+             y = c(asymp.LCL, rev(asymp.UCL)),
+             col =  adjustcolor("orangered", alpha.f = 0.10), border = NA))
+
+# with(mns_rank, lines(seq(2.5, 5, by=.25), asymp.LCL, lwd=2, col="dodgerblue"))
+# with(mns_rank, lines(seq(2.5, 5, by=.25), asymp.UCL, lwd=2, col="dodgerblue"))
+
 ```
 
 ```{r}
-# # # # #
-# Plots #
-# # # # #
+# ----------
+# More Plots
+# ----------
+
+summary(adm_mod)
+ref.grid(adm_mod)
 
 # Look at ranges...
 summary(g_admission)
 
-# Predict Status
+# Predict for Status
 mns <- summary(lsmeans(adm_mod, "status", type="response"))
 
 # Graph Status
@@ -172,7 +196,7 @@ ggplot(mns, aes(x=status, y=prob)) +
   geom_errorbar(aes(ymin=asymp.LCL, ymax=asymp.UCL), width=0.2) +
   theme_bw()
 
-# Predict GPA
+# Predict for GPA
 library(lsmeans)
 adm_mns_gpa <- summary(lsmeans(adm_mod, "gpafin",
                                  at=list(gpafin = seq(2, 4, 0.1)), type="response"))
@@ -185,7 +209,7 @@ g +
   geom_line(data=adm_mns_gpa, aes(x=gpafin, y=asymp.LCL), linetype="dashed") +
   geom_line(data=adm_mns_gpa, aes(x=gpafin, y=asymp.UCL), linetype="dashed")
 
-# Predict GRE Verbal
+# Predict for GRE Verbal
 adm_mns_grev <- summary(lsmeans(adm_mod, "grev",
                                  at=list(grev = seq(135, 170, 1)), type="response"))
 
@@ -197,19 +221,19 @@ g1 +
   geom_line(data=adm_mns_grev, aes(x=grev, y=asymp.LCL), linetype="dashed") +
   geom_line(data=adm_mns_grev, aes(x=grev, y=asymp.UCL), linetype="dashed")
 
-# Predict GRE Math
+# Predict for GRE Math
 adm_mns_grem <- summary(lsmeans(adm_mod, "grem",
                                 at=list(grem = seq(141, 170, 1)), type="response"))
 
 # Graph GRE Math
 g2 <- simpleScatter(g_admission, grem, decision_bin, title="Probability of Admission v. GRE Math Score",
-                    xlab="GRE Verbal", ylab="P(Admission)")
+                    xlab="GRE Math", ylab="P(Admission)")
 g2 +
   geom_line(data=adm_mns_grem, aes(x=grem, y=prob), color="red") +
   geom_line(data=adm_mns_grem, aes(x=grem, y=asymp.LCL), linetype="dashed") +
   geom_line(data=adm_mns_grem, aes(x=grem, y=asymp.UCL), linetype="dashed")
 
-# Predict Ranking
+# Predict for Ranking
 adm_mns_rank <- summary(lsmeans(adm_mod, "ranking",
                                  at=list(ranking=seq(2.2, 5, 0.1)), type="response"))
 
